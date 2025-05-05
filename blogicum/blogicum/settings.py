@@ -26,7 +26,9 @@ SECRET_KEY = 'django-insecure-l^tk594v+jjetl5ee4h)ob73afvntf*70z+-a)d3dcfm*+bo7t
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    '127.0.0.1'
+    '127.0.0.1',
+    'www.dsm1337.pythonanywhere.com',
+    'dsm1337.pythonanywhere.com',
 ]
 
 LOGIN_REDIRECT_URL = 'blog:index'

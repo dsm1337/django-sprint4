@@ -1,13 +1,12 @@
 from django import forms
-from django.contrib.auth import get_user_model
 
-from .models import Post, Comment
+from .models import Post, Comment, User
 
 
 class CreatePostForm(forms.ModelForm):
     class Meta:
         model = Post
-        fields = ['title', 'text', 'category', 'location', 'pub_date', 'image']
+        exclude = ('author',)
         widgets = {
             'pub_date': forms.DateInput(attrs={'type': 'date'})
         }
@@ -16,10 +15,10 @@ class CreatePostForm(forms.ModelForm):
 class CommentForm(forms.ModelForm):
     class Meta:
         model = Comment
-        fields = ['text']
+        fields = ('text', )
 
 
 class ProfileForm(forms.ModelForm):
     class Meta:
-        model = get_user_model()
-        fields = ['first_name', 'last_name', 'username', 'email']
+        model = User
+        fields = ('first_name', 'last_name', 'username', 'email')
