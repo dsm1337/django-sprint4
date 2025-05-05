@@ -169,16 +169,13 @@ class Profile(DetailView):
     paginate_by = PAGINATE_BY
 
     def get_context_data(self, **kwargs):
-        if self.request.user == self.object:
-            posts = self.object.posts.select_related('author')
-        else:
-            posts = get_published_posts(
-                self.object.posts.select_related('author')
-            )
         return super().get_context_data(
             **kwargs,
             page_obj=get_page_obj(
-                posts,
+                get_published_posts(
+                    self.object.posts,
+                    published_check=(self.request.user != self.object)
+                ),
                 self.request
             )
         )
