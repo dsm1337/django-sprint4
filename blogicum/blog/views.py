@@ -1,6 +1,6 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -15,24 +15,22 @@ from .models import Category, Comment, Post, User
 PAGINATE_BY = 10
 
 
-def create_paginator(posts, page):
-    paginator = Paginator(posts, PAGINATE_BY)
-    return paginator.get_page(page)
+def get_page_obj(posts, request, paginate_by=PAGINATE_BY):
+    return Paginator(posts, paginate_by).get_page(request.GET.get('page'))
 
 
 def get_published_posts(posts=Post.objects, select_related=True,
-                        published_check=True, add_comment=True, for_user=None):
-    filter = Q(is_published=True, category__is_published=True,
-               pub_date__lte=timezone.now())
+                        published_check=True, add_comment=True):
     if select_related:
         posts = posts.select_related('location', 'category', 'author')
     if published_check:
-        posts = posts.filter(filter)
-    elif for_user:
-        posts = posts.filter(filter | Q(author=for_user))
+        posts = posts.filter(
+            is_published=True, category__is_published=True,
+            pub_date__lte=timezone.now())
     if add_comment:
-        posts = posts.annotate(comment_count=Count('comments'))
-    return posts.order_by('-pub_date')
+        posts = (posts.annotate(comment_count=Count('comments'))
+                 .order_by(*Post._meta.ordering))
+    return posts
 
 
 class OnlyAuthorMixin(UserPassesTestMixin):
@@ -54,9 +52,7 @@ class Index(ListView):
     model = Post
     template_name = 'blog/index.html'
     paginate_by = PAGINATE_BY
-
-    def get_queryset(self):
-        return get_published_posts()
+    queryset = get_published_posts()
 
 
 class PostDetail(FormView, DetailView):
@@ -68,15 +64,19 @@ class PostDetail(FormView, DetailView):
 
     def get_object(self, queryset=None):
         post = super().get_object()
-        if self.request.user != post.author:
-            return get_object_or_404(get_published_posts(
-                add_comment=False), id=post.id)
-        return post
+        if self.request.user == post.author:
+            return post
+        return super().get_object(
+            queryset=get_published_posts(
+                select_related=False,
+                add_comment=False
+            )
+        )
 
     def get_context_data(self, **kwargs):
         return super().get_context_data(
             **kwargs,
-            comments=(self.object.comments.select_related('author')),
+            comments=self.object.comments.select_related('author'),
             form=self.get_form()
         )
 
@@ -92,12 +92,13 @@ class CategoryPosts(DetailView):
         return super().get_queryset().filter(is_published=True)
 
     def get_context_data(self, **kwargs):
-        category_posts = super().get_context_data()['category'].posts
         return super().get_context_data(
             **kwargs,
-            page_obj=create_paginator(
-                get_published_posts(category_posts),
-                self.request.GET.get('page')
+            page_obj=get_page_obj(
+                get_published_posts(
+                    super().get_context_data()['category'].posts
+                ),
+                self.request
             )
         )
 
@@ -137,7 +138,7 @@ class CommentAction:
     pk_url_kwarg = 'comment_id'
 
     def get_success_url(self):
-        return reverse('blog:post_detail', args=[self.object.post_id])
+        return reverse('blog:post_detail', args=[self.kwargs['post_id']])
 
 
 class CreateComment(LoginRequiredMixin, CommentAction, CreateView):
@@ -168,15 +169,17 @@ class Profile(DetailView):
     paginate_by = PAGINATE_BY
 
     def get_context_data(self, **kwargs):
-        posts = get_published_posts(
-            published_check=False,
-            for_user=self.object.id
-        ).filter(author=self.object)
+        if self.request.user == self.object:
+            posts = self.object.posts.select_related('author')
+        else:
+            posts = get_published_posts(
+                self.object.posts.select_related('author')
+            )
         return super().get_context_data(
             **kwargs,
-            page_obj=create_paginator(
+            page_obj=get_page_obj(
                 posts,
-                self.request.GET.get('page')
+                self.request
             )
         )
 
